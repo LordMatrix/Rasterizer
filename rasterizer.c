@@ -104,13 +104,9 @@ void drawLine(unsigned int* pixels, int pitch, Point start, Point end) {
 static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch, float trans_x, float trans_z, float proy, float rot) {   
   int i;
 
-  float angle = 0.0f;
-
-  //Point prev_point;
-  //Point first_point;
   Point points[8];
-  int indexes[24] = { 0,1, 1,3, 2,3, 0,2,
-                      4,5, 5,7, 6,7, 4,6,
+  int indexes[24] = { 0,1, 1,2, 2,3, 0,3,
+                      4,5, 5,6, 6,7, 4,7,
                       0,4, 1,5, 2,6, 3,7};
 
 
@@ -120,9 +116,9 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
     float y = cubef [ i * 3 + 1];
     float z = cubef [ i * 3 + 2];
 
-    angle = i * ((2*PI) / 4.0f);
-
-    x = cos(rot+angle) * x;
+//BROKEN ROTATION
+    float angle = i * ((2*PI) / 8.0f);
+    x += cos(rot+angle) * x;
 //    y = sin(rot+angle) * y;
 
     z += trans_z;
@@ -132,25 +128,16 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
     xp += w * 0.5f;
     yp += h * 0.5f;
 
-    //DRAW LINES
-    Point current_point = makePoint(xp,yp,0);
-/*
-    if (i>0) {
-       drawLine(pixels, pitch, prev_point, current_point);
-    } else {
-      first_point = current_point;
-    }
-    prev_point = current_point;
-*/
-    points[i] = current_point;
+
+    points[i] = makePoint(xp,yp,0);
 
     if (( xp >= 0) && (xp < w) && (yp >= 0) && (yp < h)) {
         int color = getColorByIndex(i);
         pixels [ ((int)xp) + (((int)yp) * pitch)] = color;
     }
   }
-  //drawLine(pixels, pitch, prev_point, first_point);
 
+  //DRAW LINES
   for (i=0; i<24; i+=2) {
     Point start = points[indexes[i]];
     Point end = points[indexes[i+1]];
@@ -159,9 +146,6 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
   
 }
 
-//0,1 1,2 2,3 3,0
-
-//4,5 5,6 6,7 7,4
  
 /*******************************/
 /********* MAIN CODE  **********/
