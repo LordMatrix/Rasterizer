@@ -9,16 +9,6 @@
 #include "sdl_funcs.h"
 
 
-/*
- Este ejemplo muestra como mover y proyectar puntos 3D
- en diferentes formatos numericos.
- Para vuestros trabajos debeis fijaros primero en la
- version de coma flotante
-*/
-
-// Definicion de un cubo en 3 formatos numericos diferentes
-// Entero, coma fija 8 bits y flotante
-
 #define LCF (200.0f)    // En flotantes
 #define PI 3.1416f
 
@@ -39,8 +29,7 @@ static Point makePoint(int x, int y, int z) {
 }
 
 
-// Flotantes
-
+// Floats
 static float cubef [8*3] = {
     -LCF,-LCF, LCF,
      LCF,-LCF, LCF,
@@ -54,6 +43,24 @@ static float cubef [8*3] = {
 };
 
 
+
+/// Sets the color of a pixel
+void setColorPixel(unsigned int* pixels, int x, int y, int color) {
+  int pitch = g_SDLSrf->pitch >> 2;
+  pixels [ x + (y * pitch)] = color;
+}
+
+
+
+/// Retrieves the color of a pixel
+int getColorPixel(unsigned int* pixels, int x, int y) {
+  int pitch = g_SDLSrf->pitch >> 2;
+  return pixels[ x + (y * pitch)];
+}
+
+
+
+/// Somewhat randomizes the color returned
 int getColorByIndex(int i) {
     int color;
     switch (i) {
@@ -81,6 +88,7 @@ int getColorByIndex(int i) {
 }
 
 
+
 /// Draws a straight line given a pair of points
 void drawLine(unsigned int* pixels, int pitch, Point start, Point end) {
     //Bresenham's algorithm
@@ -89,7 +97,7 @@ void drawLine(unsigned int* pixels, int pitch, Point start, Point end) {
     int err = (dx>dy ? dx : -dy)/2, e2;
 
     for (;;) {
-      pixels [ (start.x) + (start.y * pitch)] = 0xffffff;
+      setColorPixel(pixels, start.x, start.y, 0xffffff);
 
       if (start.x==end.x && start.y==end.y)
         break;
@@ -139,6 +147,38 @@ static Point rotatePoint(Point p, float rads, int axis) {
 
 
 
+/// Hides sides that are hidden behind others
+static void doCull(unsigned int* pixels) {
+  //There will only be a maximum of 3 sides showing simultaneously
+  
+}
+
+
+
+/// Scans the pixels looking for line primitives. Colors the space between them
+static void rasterize(unsigned int* pixels) {
+  int i,j;
+  int siding = 0;
+
+  for (i = 0; i < g_SDLSrf->w; i++) {
+    siding =0;
+    for (j = 0; j < g_SDLSrf->h; j++) {
+      int color = getColorPixel(pixels, i, j);
+
+      if (color == 0x000000) {
+        if (siding) {
+          setColorPixel(pixels, i, j, 0xff0000);
+        }
+      } else {
+        siding = (siding == 0) ? 1 : 0;
+      }
+    }
+  }
+
+}
+
+
+
 static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch, float trans_x, float trans_z, float proy, float rot) {   
   int i;
 
@@ -177,7 +217,7 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
 
     if (( xp >= 0) && (xp < w) && (yp >= 0) && (yp < h)) {
         int color = getColorByIndex(i);
-        pixels [ ((int)xp) + (((int)yp) * pitch)] = color;
+        setColorPixel(pixels, (int)xp, (int)yp, color);
     }
   }
 
@@ -187,7 +227,12 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
     Point end = points[indices[i+1]];
     drawLine(pixels, pitch, start, end);
   }
-  
+ 
+  //CULL
+  doCull(pixels);
+
+  //RASTERIZE POLYGONS
+  rasterize(pixels); 
 }
 
  
@@ -214,19 +259,17 @@ int main ( int argc, char **argv) {
 
     int pitch = g_SDLSrf->pitch >> 2;
 
-    // Borrar pantalla
-    memset ( g_screen_pixels, 0, g_SDLSrf->h * g_SDLSrf->pitch);  
 
     // Girar los cubos en pantalla
     float x, z, offs_z = 1200.0f;
     float radius = 100.0f;
-    x = 0.0f   + radius;// * cos( ang + ((0.0f * PI * 2.0f) / 3.0f));
-    z = offs_z + radius;// * sin( ang + ((0.0f * PI * 2.0f) / 3.0f));
+    x = 0.0f   + radius;
+    z = offs_z + radius;
     PaintCubeInFloat ( g_screen_pixels, (float)g_SDLSrf->w, (float)g_SDLSrf->h, pitch, 
                        x, z, 
                        projection, ang);
 
-    ang += 0.05f;
+    ang += 0.01f;
 
     frame_SDL();
 
