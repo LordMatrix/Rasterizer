@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -11,6 +10,7 @@
 
 #define LCF (200.0f)    // En flotantes
 #define PI 3.1416f
+#define DEBUG 0
 
 
 //Encapsulated point
@@ -18,10 +18,14 @@ typedef struct {
   int x,y,z;
 } Point;
 
+typedef struct {
+  float x,y,z;
+} Pointf;
+
 
 //Point "constructor"
 static Point makePoint(int x, int y, int z) {
-  Point p; 
+  Point p;
   p.x = x;
   p.y = y;
   p.z = z;
@@ -30,16 +34,11 @@ static Point makePoint(int x, int y, int z) {
 
 
 // Floats
-static float cubef [8*3] = {
+static float cubef [12] = {
     -LCF,-LCF, LCF,
      LCF,-LCF, LCF,
      LCF, LCF, LCF,
     -LCF, LCF, LCF,
-
-    -LCF,-LCF, -LCF,
-     LCF,-LCF, -LCF,
-     LCF, LCF, -LCF,
-     -LCF, LCF, -LCF,
 };
 
 
@@ -90,14 +89,33 @@ int getColorByIndex(int i) {
 
 
 /// Draws a straight line given a pair of points
-void drawLine(unsigned int* pixels, int pitch, Point start, Point end) {
+void drawLine(unsigned int* pixels, int pitch, Point start, Point end, int color) {
     //Bresenham's algorithm
     int dx = abs(end.x - start.x), sx = start.x < end.x ? 1 : -1;
     int dy = abs(end.y - start.y), sy = start.y < end.y ? 1 : -1;
     int err = (dx>dy ? dx : -dy)/2, e2;
 
     for (;;) {
-      setColorPixel(pixels, start.x, start.y, 0xffffff);
+      setColorPixel(pixels, start.x, start.y, color);
+
+      if (start.x==end.x && start.y==end.y)
+        break;
+
+      e2 = err;
+      if (e2 >-dx) { err -= dy; start.x += sx; }
+      if (e2 < dy) { err += dx; start.y += sy; }
+    }
+}
+
+/// Draws a straight line given a pair of points
+void drawLineF(unsigned int* pixels, int pitch, Pointf start, Pointf end, int color) {
+    //Bresenham's algorithm
+    int dx = abs(end.x - start.x), sx = start.x < end.x ? 1 : -1;
+    int dy = abs(end.y - start.y), sy = start.y < end.y ? 1 : -1;
+    int err = (dx>dy ? dx : -dy)/2, e2;
+
+    for (;;) {
+      setColorPixel(pixels, start.x, start.y, color);
 
       if (start.x==end.x && start.y==end.y)
         break;
@@ -150,46 +168,91 @@ static Point rotatePoint(Point p, float rads, int axis) {
 /// Hides sides that are hidden behind others
 static void doCull(unsigned int* pixels) {
   //There will only be a maximum of 3 sides showing simultaneously
-  
+
 }
 
 
 
 /// Scans the pixels looking for line primitives. Colors the space between them
-static void rasterize(unsigned int* pixels) {
-  int i,j;
-  int siding = 0;
+static void rasterize(unsigned int* pixels, Point* p, int pitch) {
+  int i;
 
-  for (i = 0; i < g_SDLSrf->w; i++) {
-    siding =0;
-    for (j = 0; j < g_SDLSrf->h; j++) {
-      int color = getColorPixel(pixels, i, j);
+  Point top = p[0];
+  Point bottom = p[0];
+  Point left = p[0];
+  Point right = p[0];
 
-      if (color == 0x000000) {
-        if (siding) {
-          setColorPixel(pixels, i, j, 0xff0000);
-        }
-      } else {
-        siding = (siding == 0) ? 1 : 0;
+  int repeated = 0;
+  int j;
+
+  // Calculate top, bottom, left, right
+  for(i=0; i<4;i++) {
+    // Obtain actual point
+    Point actual = {p[i].x, p[i].y, p[i].z};
+    if(actual.y > top.y) { top = actual; }
+    if(actual.y < bottom.y) { bottom = actual; }
+    if(actual.x > right.x) { right = actual; }
+    if(actual.x < left.x) { left = actual; }
+
+    for(j=0; j<4 && repeated<2; j++) {
+      if(p[i].x == p[j].x && i != j) {
+        repeated++;
       }
     }
   }
 
+#if DEBUG
+  // Show top, bottom, right, left after calculate - DEBUG
+  printf("Top: %i, %i\n", top.x, top.y);
+  printf("Bottom: %i, %i\n", bottom.x, bottom.y);
+  printf("Right: %i, %i\n", right.x, right.y);
+  printf("Left: %i, %i\n", left.x, left.y);
+#endif
+
+
+  if(repeated < 2) {
+    Pointf start;
+    Pointf end;
+
+    // Calculate dx
+    float dx = 0.0f;
+
+    dx = (right.x - left.x) / (top.y - bottom.y);
+    for(i=0; i<top.y - bottom.y; ++i) {
+      // Calculate y
+      start.y = top.y - i;
+      end.y = top.y - i;
+
+      // Calculate x
+      start.x = left.x + top.x - dx;
+      end.x = right.x - top.x + dx;
+      //printf("%f, %f\n", start.x, end.x);
+      drawLineF(pixels, pitch, start, end, 0xff0000);
+    }
+  } else {
+    Point start;
+    Point end;
+    for(i=0; i<top.y-bottom.y; i++) {
+      start.y = i;
+      start.x = left.x;
+      end.y = i;
+      end.x = right.x;
+      printf("Start: %i,%i - End: %i,%i\n", start.x, start.y, end.x, end.y);
+      drawLine(pixels, pitch, start, end, 0xff0000);
+    }
+  }
 }
 
 
-
-static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch, float trans_x, float trans_z, float proy, float rot) {   
+static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch, float trans_x, float trans_z, float proy, float rot) {
   int i;
 
-  Point points[8];
+  Point points[4];
   //Indices for drawing lines to connect edges
-  int indices[24] = { 0,1, 1,2, 2,3, 0,3,
-                      4,5, 5,6, 6,7, 4,7,
-                      0,4, 1,5, 2,6, 3,7};
+  int indices[8] = { 0,1, 1,2, 2,3, 3,0};
 
-  //Transform and paint all vertices in cube
-  for ( i=0; i<8; i++) { 
+  //Transform and paint all vertices in square
+  for ( i=0; i<4; i++) {
     float xp, yp;
     float x = cubef [ i * 3 + 0];
     float y = cubef [ i * 3 + 1];
@@ -213,36 +276,36 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
     yp += h * 0.5f;
 
     //Save point
-    points[i] = makePoint(xp,yp,0);
+    points[i] = makePoint(xp,yp,p.z);
 
-    if (( xp >= 0) && (xp < w) && (yp >= 0) && (yp < h)) {
+    /*if (( xp >= 0) && (xp < w) && (yp >= 0) && (yp < h)) {
         int color = getColorByIndex(i);
         setColorPixel(pixels, (int)xp, (int)yp, color);
-    }
+    }*/
   }
 
   //DRAW LINE PRIMITIVES
-  for (i=0; i<24; i+=2) {
+  for (i=0; i<8; i+=2) {
     Point start = points[indices[i]];
     Point end = points[indices[i+1]];
-    drawLine(pixels, pitch, start, end);
+    //drawLine(pixels, pitch, start, end, 0xffffff);
   }
- 
+
   //CULL
   doCull(pixels);
 
   //RASTERIZE POLYGONS
-  rasterize(pixels); 
+  rasterize(pixels, points, pitch);
 }
 
- 
+
 /*******************************/
 /********* MAIN CODE  **********/
 /*******************************/
 
 
 int main ( int argc, char **argv) {
-  
+
   init_SDL();
 
   // Horizontal field of view
@@ -254,7 +317,7 @@ int main ( int argc, char **argv) {
   float ang = 0.0f;
 
   g_end = 0;
-  while (!g_end) { 
+  while (!g_end) {
     clear_SDL();
 
     int pitch = g_SDLSrf->pitch >> 2;
@@ -265,8 +328,8 @@ int main ( int argc, char **argv) {
     float radius = 100.0f;
     x = 0.0f   + radius;
     z = offs_z + radius;
-    PaintCubeInFloat ( g_screen_pixels, (float)g_SDLSrf->w, (float)g_SDLSrf->h, pitch, 
-                       x, z, 
+    PaintCubeInFloat ( g_screen_pixels, (float)g_SDLSrf->w, (float)g_SDLSrf->h, pitch,
+                       x, z,
                        projection, ang);
 
     ang += 0.01f;
@@ -280,5 +343,3 @@ int main ( int argc, char **argv) {
 
   return 0;
 }
-
-
