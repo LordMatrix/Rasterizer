@@ -16,19 +16,21 @@
 //Encapsulated point
 typedef struct {
   int x,y,z;
+  int used;
 } Point;
 
 typedef struct {
   float x,y,z;
+  int used;
 } Pointf;
 
 
 //Point "constructor"
-static Point makePoint(int x, int y, int z) {
-  Point p;
-  p.x = x;
-  p.y = y;
-  p.z = z;
+static Point* makePoint(int x, int y, int z) {
+  Point* p = malloc(sizeof(Point));
+  p->x = x;
+  p->y = y;
+  p->z = z;
   return p;
 }
 
@@ -107,6 +109,7 @@ void drawLine(unsigned int* pixels, int pitch, Point start, Point end, int color
     }
 }
 
+
 /// Draws a straight line given a pair of points
 void drawLineF(unsigned int* pixels, int pitch, Pointf start, Pointf end, int color) {
     //Bresenham's algorithm
@@ -159,146 +162,101 @@ static Point rotatePoint(Point p, float rads, int axis) {
       break;
   }
 
+  trans.used = 0;
 
   return trans;
 }
 
 
 
-/// Hides sides that are hidden behind others
-static void doCull(unsigned int* pixels) {
-  //There will only be a maximum of 3 sides showing simultaneously
+static void rasterize(unsigned int* pixels, Point** p, int pitch) {
 
-}
+  Point* top = p[0];
+  Point* bottom = p[0];
+  Point* left = p[0];
+  Point* right = p[0];
 
-
-
-static void rasterize(unsigned int* pixels, Point* p, int pitch) {
-  int i;
-
-  Point top = p[0];
-  Point bottom = p[0];
-  Point left = p[0];
-  Point right = p[0];
-
-  int repeated = 0;
-  int j;
-
-  // Calculate top, bottom, left, right
-  for(i=0; i<4;i++) {
-    // Obtain actual point
-    Point actual = {p[i].x, p[i].y, p[i].z};
-    if(actual.y > top.y) { top = actual; }
-    if(actual.y < bottom.y) { bottom = actual; }
-    if(actual.x > right.x) { right = actual; }
-    if(actual.x < left.x) { left = actual; }
-
-    for(j=0; j<4 && repeated<2; j++) {
-      if(p[i].x == p[j].x && i != j) {
-        repeated++;
-      }
-    }
-  }
-
-#if DEBUG
-  // Show top, bottom, right, left after calculate - DEBUG
-  printf("Top: %i, %i\n", top.x, top.y);
-  printf("Bottom: %i, %i\n", bottom.x, bottom.y);
-  printf("Right: %i, %i\n", right.x, right.y);
-  printf("Left: %i, %i\n", left.x, left.y);
-#endif
-
-
-  if(repeated < 2) {
-    Pointf start;
-    Pointf end;
-
-    // Calculate dx
-    float dx = 0.0f;
-
-    dx = (right.x - left.x) / (top.y - bottom.y);
-    for(i=0; i<top.y - bottom.y; ++i) {
-      // Calculate y
-      start.y = top.y - i;
-      end.y = top.y - i;
-
-      // Calculate x
-      start.x = left.x + top.x - dx;
-      end.x = right.x - top.x + dx;
-      //printf("%f, %f\n", start.x, end.x);
-      drawLineF(pixels, pitch, start, end, 0xff0000);
-    }
-  } else {
-    Point start;
-    Point end;
-    for(i=0; i<top.y-bottom.y; i++) {
-      start.y = i;
-      start.x = left.x;
-      end.y = i;
-      end.x = right.x;
-//      printf("Start: %i,%i - End: %i,%i\n", start.x, start.y, end.x, end.y);
-      drawLine(pixels, pitch, start, end, 0xff0000);
-    }
-  }
-}
-
-
-static void rasterizeChuster(unsigned int* pixels, Point* p, int pitch) {
-
-  Point top = p[0];
-  Point bottom = p[0];
-  Point left = p[0];
-  Point right = p[0];
   int i,j;
   float diff_x;
 
   // Calculate top, bottom, left, right
   for(i=0; i<4;i++) {
     // Obtain actual point
-    Point actual = {p[i].x, p[i].y, p[i].z};
-    if(actual.y < top.y) { top = actual; }
-    if(actual.y > bottom.y) { bottom = actual; }
-    if(actual.x > right.x) { right = actual; }
-    if(actual.x < left.x) { left = actual; }
+    Point* actual = p[i];
+
+    if(actual->y < top->y) { top = actual; actual->used++; }
+    if(actual->y > bottom->y) { bottom = actual; actual->used++; }
+    if(actual->x > right->x) { right = actual; actual->used++; }
+    if(actual->x < left->x) { left = actual; actual->used++; }
+
   }
 
-  //Indexes are screen Ys, values are X line points
-  //2 arrays indicating left and right limits of the polygon
-  int xs_left[1024];
-  int xs_right[1024];
-  memset(xs_left, 0, 1024);
-  memset(xs_right, 0, 1024);
-
-  //TOP-LEFT EDGE
-  diff_x = (float)(top.x - left.x) / (float)(left.y - top.y);
-  for (i=0; i< left.y - top.y; i++) {
-    xs_left[top.y + i] = top.x - (int)(diff_x * i);
-  }
-
-  //LEFT-BOTTOM EDGE
-  diff_x = (float)(bottom.x - left.x) / (float)(bottom.y - left.y);
-  for (i=0; i< bottom.y - left.y; i++) {
-    xs_left[left.y + i] = left.x + (int)(diff_x * i);
-  }
-
-  //TOP-RIGHT EDGE
-  diff_x = (float)(right.x - top.x) / (float)(right.y - top.y);
-  for (i=0; i< right.y - top.y; i++) {
-    xs_right[top.y + i] = top.x + (int)(diff_x * i);
-  }
-
-  //RIGHT-BOTTOM EDGE
-  diff_x = (float)(right.x - bottom.x) / (float)(bottom.y - right.y);
-  for (i=0; i< bottom.y - right.y; i++) {
-    xs_right[right.y + i] = right.x - (int)(diff_x * i);
-  }
-
-  for (i=0; i<400; i++) {
-    if (xs_left[i] > 0 && xs_left[i] < 800) {
-      for (j=0; j<xs_right[i]-xs_left[i]; j++) {
-        //printf("%d\n", xs_left[i]+j);
-        setColorPixel(pixels, xs_left[i]+j, i, 0xFF0000);
+  int k,repeated=0;
+  for(k=0; k<4 && repeated<2; k++) {
+    for(j=0; j<4 && repeated<2; j++) {
+      if(p[k]->x == p[j]->x && k != j) {
+        repeated++;
       }
+    }
+  }
+  //printf("REPEAT : %d\n", repeated);
+
+
+  if (repeated < 1) {
+    //Indexes are screen Ys, values are X line points
+    //2 arrays indicating left and right limits of the polygon
+    int xs_left[1024];
+    int xs_right[1024];
+    memset(xs_left, 0, 1024);
+    memset(xs_right, 0, 1024);
+
+    //TOP-LEFT EDGE
+    diff_x = (float)(top->x - left->x) / (float)(left->y - top->y);
+    for (i=0; i< left->y - top->y; i++) {
+      xs_left[top->y + i] = top->x - (int)(diff_x * i);
+    }
+
+    //LEFT-BOTTOM EDGE
+    diff_x = (float)(bottom->x - left->x) / (float)(bottom->y - left->y);
+    for (i=0; i< bottom->y - left->y; i++) {
+      xs_left[left->y + i] = left->x + (int)(diff_x * i);
+    }
+
+    //TOP-RIGHT EDGE
+    diff_x = (float)(right->x - top->x) / (float)(right->y - top->y);
+    for (i=0; i< right->y - top->y; i++) {
+      xs_right[top->y + i] = top->x + (int)(diff_x * i);
+    }
+
+    //RIGHT-BOTTOM EDGE
+    diff_x = (float)(right->x - bottom->x) / (float)(bottom->y - right->y);
+    for (i=0; i< bottom->y - right->y; i++) {
+      xs_right[right->y + i] = right->x - (int)(diff_x * i);
+    }
+
+    for (i=0; i<400; i++) {
+      if (xs_left[i] > 0 && xs_left[i] < 800) {
+        for (j=0; j<xs_right[i]-xs_left[i]; j++) {
+          //printf("%d\n", xs_left[i]+j);
+          setColorPixel(pixels, xs_left[i]+j, i, 0xFF0000);
+        }
+      }
+    }
+  } else {
+    Point start;
+    Point end;
+    for(i=0; i< abs(top->y - bottom->y); i++) {
+      start.x = left->x;
+      start.y = top->y;
+      end.x = right->x;
+      end.y = bottom->y;
+       printf("Start: %i,%i - End: %i,%i\n", start.x, start.y, end.x, end.y);
+      //drawLine(pixels, pitch, start, end, 0xff0000);
+
+      for (j=0; j<abs(right->x - left->x); j++) {
+        setColorPixel(pixels, left->x+j, start.y+i, 0xFF0000);
+      }
+
     }
   }
 }
@@ -307,7 +265,7 @@ static void rasterizeChuster(unsigned int* pixels, Point* p, int pitch) {
 static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch, float trans_x, float trans_z, float proy, float rot) {
   int i;
 
-  Point points[4];
+  Point* points[4];
   //Indices for drawing lines to connect edges
   int indices[8] = { 0,1, 1,2, 2,3, 3,0};
 
@@ -319,24 +277,24 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
     float z = cubef [ i * 3 + 2];
 
     //Construct point
-    Point p = makePoint(x, y, z);
+    Point* p = makePoint(x, y, z);
 
     //Rotate in all axis
-    p = rotatePoint(p, rot, 0);
-    p = rotatePoint(p, rot, 1);
-    p = rotatePoint(p, rot, 2);
+    *p = rotatePoint(*p, rot, 0);
+    *p = rotatePoint(*p, rot, 1);
+    *p = rotatePoint(*p, rot, 2);
 
     //project Z axis on 2 dimensions
-    p.z -= trans_z;
-    xp = (p.x * proy) / p.z;
-    yp = (p.y * proy) / p.z;
+    p->z -= trans_z;
+    xp = (p->x * proy) / p->z;
+    yp = (p->y * proy) / p->z;
 
     //translate points to the middle of the screen
     xp += w * 0.5f;
     yp += h * 0.5f;
 
     //Save point
-    points[i] = makePoint(xp,yp,p.z);
+    points[i] = makePoint(xp,yp,p->z);
 
     /*if (( xp >= 0) && (xp < w) && (yp >= 0) && (yp < h)) {
         int color = getColorByIndex(i);
@@ -346,16 +304,13 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
 
   //DRAW LINE PRIMITIVES
   for (i=0; i<8; i+=2) {
-    Point start = points[indices[i]];
-    Point end = points[indices[i+1]];
-    drawLine(pixels, pitch, start, end, 0xffffff);
+    Point* start = points[indices[i]];
+    Point* end = points[indices[i+1]];
+    drawLine(pixels, pitch, *start, *end, 0xffffff);
   }
 
-  //CULL
-  doCull(pixels);
-
   //RASTERIZE POLYGONS
-  rasterizeChuster(pixels, points, pitch);
+  rasterize(pixels, points, pitch);
 }
 
 
@@ -374,7 +329,7 @@ int main ( int argc, char **argv) {
   float half_scr_w = (float)(g_SDLSrf->w >> 1);
   float projection = (1.0f / tan ( hfov * 0.5f)) * half_scr_w;
 
-  float ang = 0.3f;
+  float ang = 0;
 
   g_end = 0;
   while (!g_end) {
