@@ -13,6 +13,7 @@
 #define DEBUG 0
 
 
+
 //Encapsulated point
 typedef struct {
   int x,y,z;
@@ -171,10 +172,18 @@ static Point rotatePoint(Point p, float rads, int axis) {
 
 static void rasterize(unsigned int* pixels, Point** p, int pitch) {
 
-  Point* top = p[0];
-  Point* bottom = p[0];
-  Point* left = p[0];
-  Point* right = p[0];
+
+//PROPUESTA DE TRAMEO: DESPLAZAR VÉRTICES QUE REPITEN COORDENADA UN PIXEL PARA QUE NO SEAN IGUALES
+
+  Point* temp_top = makePoint(0, 639, 0);
+  Point* temp_bottom = makePoint(0, 0, 0);
+  Point* temp_left = makePoint(479, 0, 0);
+  Point* temp_right = makePoint(0, 0, 0);
+
+  Point* top = temp_top;
+  Point* bottom = temp_bottom;
+  Point* left = temp_left;
+  Point* right = temp_right;
 
   int i,j;
   float diff_x;
@@ -191,18 +200,34 @@ static void rasterize(unsigned int* pixels, Point** p, int pitch) {
 
   }
 
+  //free (temp_top);
+  //free (temp_bottom);
+  //free (temp_left);
+  //free (temp_right);
+
+  int usages[4] = {0,0,0,0};
+
   int k,repeated=0;
-  for(k=0; k<4 && repeated<2; k++) {
-    for(j=0; j<4 && repeated<2; j++) {
-      if(p[k]->x == p[j]->x && k != j) {
-        repeated++;
-      }
-    }
+  for(k=0; k<4; k++) {
+    if (p[k] == top) usages[k]++;
+    if (p[k] == bottom) usages[k]++;
+    if (p[k] == right) usages[k]++;
+    if (p[k] == left) usages[k]++;
   }
-  //printf("REPEAT : %d\n", repeated);
+  printf("USAGES : %d, %d, %d, %d\n", usages[0], usages[1], usages[2], usages[3]);
 
 
-  if (repeated < 1) {
+    if (usages[0] == 2 && usages[3]==0)  
+      right = p[3];
+
+    if (usages[1] == 0 && usages[2]==2)  
+      left = p[1];
+
+    if (usages[2] == 0 && usages[3]==2)  
+      top = p[2];
+  
+
+  if (repeated < 4) {
     //Indexes are screen Ys, values are X line points
     //2 arrays indicating left and right limits of the polygon
     int xs_left[1024];
@@ -234,8 +259,8 @@ static void rasterize(unsigned int* pixels, Point** p, int pitch) {
       xs_right[right->y + i] = right->x - (int)(diff_x * i);
     }
 
-    for (i=0; i<400; i++) {
-      if (xs_left[i] > 0 && xs_left[i] < 800) {
+    for (i=0; i<480; i++) {
+      if (xs_left[i] > 0 && xs_left[i] < 640) {
         for (j=0; j<xs_right[i]-xs_left[i]; j++) {
           //printf("%d\n", xs_left[i]+j);
           setColorPixel(pixels, xs_left[i]+j, i, 0xFF0000);
@@ -250,7 +275,7 @@ static void rasterize(unsigned int* pixels, Point** p, int pitch) {
       start.y = top->y;
       end.x = right->x;
       end.y = bottom->y;
-       printf("Start: %i,%i - End: %i,%i\n", start.x, start.y, end.x, end.y);
+//      printf("Start: %i,%i - End: %i,%i\n", start.x, start.y, end.x, end.y);
       //drawLine(pixels, pitch, start, end, 0xff0000);
 
       for (j=0; j<abs(right->x - left->x); j++) {
@@ -347,7 +372,10 @@ int main ( int argc, char **argv) {
                        x, z,
                        projection, ang);
 
-    ang += 0.01f;
+
+    
+    if (g_keydown == 1)
+      ang += 0.01f;
 
     frame_SDL();
 
@@ -358,4 +386,3 @@ int main ( int argc, char **argv) {
 
   return 0;
 }
-
