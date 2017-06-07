@@ -37,11 +37,16 @@ static Point* makePoint(int x, int y, int z) {
 
 
 // Floats
-static float cubef [12] = {
+static float cubef [24] = {
     -LCF,-LCF, LCF,
      LCF,-LCF, LCF,
      LCF, LCF, LCF,
     -LCF, LCF, LCF,
+
+    -LCF,-LCF, -LCF,
+     LCF,-LCF, -LCF,
+     LCF, LCF, -LCF,
+    -LCF, LCF, -LCF,
 };
 
 
@@ -170,118 +175,58 @@ static Point rotatePoint(Point p, float rads, int axis) {
 
 
 
-static void rasterize(unsigned int* pixels, Point** p, int pitch) {
+int min(int n1, int n2, int n3, int n4) {
+  float minn = n1;
+
+  if (n2 < minn) minn = n2;
+  if (n3 < minn) minn = n3;
+  if (n4 < minn) minn = n4;
+
+  return minn;
+}
 
 
-//PROPUESTA DE TRAMEO: DESPLAZAR VÉRTICES QUE REPITEN COORDENADA UN PIXEL PARA QUE NO SEAN IGUALES
+int max(int n1, int n2, int n3, int n4) {
+  float maxn = n1;
 
-  Point* temp_top = makePoint(0, 639, 0);
-  Point* temp_bottom = makePoint(0, 0, 0);
-  Point* temp_left = makePoint(479, 0, 0);
-  Point* temp_right = makePoint(0, 0, 0);
+  if (n2 > maxn) maxn = n2;
+  if (n3 > maxn) maxn = n3;
+  if (n4 > maxn) maxn = n4;
 
-  Point* top = temp_top;
-  Point* bottom = temp_bottom;
-  Point* left = temp_left;
-  Point* right = temp_right;
-
-  int i,j;
-  float diff_x;
-
-  // Calculate top, bottom, left, right
-  for(i=0; i<4;i++) {
-    // Obtain actual point
-    Point* actual = p[i];
-
-    if(actual->y < top->y) { top = actual; actual->used++; }
-    if(actual->y > bottom->y) { bottom = actual; actual->used++; }
-    if(actual->x > right->x) { right = actual; actual->used++; }
-    if(actual->x < left->x) { left = actual; actual->used++; }
-
-  }
-
-  //free (temp_top);
-  //free (temp_bottom);
-  //free (temp_left);
-  //free (temp_right);
-
-  int usages[4] = {0,0,0,0};
-
-  int k,repeated=0;
-  for(k=0; k<4; k++) {
-    if (p[k] == top) usages[k]++;
-    if (p[k] == bottom) usages[k]++;
-    if (p[k] == right) usages[k]++;
-    if (p[k] == left) usages[k]++;
-  }
-  printf("USAGES : %d, %d, %d, %d\n", usages[0], usages[1], usages[2], usages[3]);
+  return maxn;
+}
 
 
-    if (usages[0] == 2 && usages[3]==0)  
-      right = p[3];
+static void rasterize(unsigned int* pixels, Point** p, int pitch, int color) {
+  int x,y;
 
-    if (usages[1] == 0 && usages[2]==2)  
-      left = p[1];
+  //Use halfspace line equation method
+  int y1 = p[0]->y;
+  int y2 = p[1]->y;
+  int y3 = p[2]->y;
+  int y4 = p[3]->y;
 
-    if (usages[2] == 0 && usages[3]==2)  
-      top = p[2];
-  
+  int x1 = p[0]->x;
+  int x2 = p[1]->x;
+  int x3 = p[2]->x;
+  int x4 = p[3]->x;
 
-  if (repeated < 4) {
-    //Indexes are screen Ys, values are X line points
-    //2 arrays indicating left and right limits of the polygon
-    int xs_left[1024];
-    int xs_right[1024];
-    memset(xs_left, 0, 1024);
-    memset(xs_right, 0, 1024);
+  int minx = (int) min(x1,x2,x3,x4);
+  int maxx = (int) max(x1,x2,x3,x4);
+  int miny = (int) min(y1,y2,y3,y4);
+  int maxy = (int) max(y1,y2,y3,y4);
 
-    //TOP-LEFT EDGE
-    diff_x = (float)(top->x - left->x) / (float)(left->y - top->y);
-    for (i=0; i< left->y - top->y; i++) {
-      xs_left[top->y + i] = top->x - (int)(diff_x * i);
-    }
+  for (y=miny; y< maxy; y++) {
+    for (x=minx; x< maxx; x++) {
+      //When all half-space functions are positive, point is in quad
 
-    //LEFT-BOTTOM EDGE
-    diff_x = (float)(bottom->x - left->x) / (float)(bottom->y - left->y);
-    for (i=0; i< bottom->y - left->y; i++) {
-      xs_left[left->y + i] = left->x + (int)(diff_x * i);
-    }
-
-    //TOP-RIGHT EDGE
-    diff_x = (float)(right->x - top->x) / (float)(right->y - top->y);
-    for (i=0; i< right->y - top->y; i++) {
-      xs_right[top->y + i] = top->x + (int)(diff_x * i);
-    }
-
-    //RIGHT-BOTTOM EDGE
-    diff_x = (float)(right->x - bottom->x) / (float)(bottom->y - right->y);
-    for (i=0; i< bottom->y - right->y; i++) {
-      xs_right[right->y + i] = right->x - (int)(diff_x * i);
-    }
-
-    for (i=0; i<480; i++) {
-      if (xs_left[i] > 0 && xs_left[i] < 640) {
-        for (j=0; j<xs_right[i]-xs_left[i]; j++) {
-          //printf("%d\n", xs_left[i]+j);
-          setColorPixel(pixels, xs_left[i]+j, i, 0xFF0000);
-        }
+      if ((x1 - x2) * (y - y1) - (y1 - y2) * (x - x1) < 0 &&
+          (x2 - x3) * (y - y2) - (y2 - y3) * (x - x2) < 0 &&
+          (x3 - x4) * (y - y3) - (y3 - y4) * (x - x3) < 0 &&
+          (x4 - x1) * (y - y4) - (y4 - y1) * (x - x4) < 0 
+          ) {
+        setColorPixel(pixels, x, y, color);
       }
-    }
-  } else {
-    Point start;
-    Point end;
-    for(i=0; i< abs(top->y - bottom->y); i++) {
-      start.x = left->x;
-      start.y = top->y;
-      end.x = right->x;
-      end.y = bottom->y;
-//      printf("Start: %i,%i - End: %i,%i\n", start.x, start.y, end.x, end.y);
-      //drawLine(pixels, pitch, start, end, 0xff0000);
-
-      for (j=0; j<abs(right->x - left->x); j++) {
-        setColorPixel(pixels, left->x+j, start.y+i, 0xFF0000);
-      }
-
     }
   }
 }
@@ -290,12 +235,14 @@ static void rasterize(unsigned int* pixels, Point** p, int pitch) {
 static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch, float trans_x, float trans_z, float proy, float rot) {
   int i;
 
-  Point* points[4];
+  Point* points[8];
   //Indices for drawing lines to connect edges
-  int indices[8] = { 0,1, 1,2, 2,3, 3,0};
+  int indices[24] = { 0,1, 1,2, 2,3, 3,0,
+                      4,5, 5,6, 6,7, 4,7,
+                      0,4, 1,5, 2,6, 3,7};
 
   //Transform and paint all vertices in square
-  for ( i=0; i<4; i++) {
+  for ( i=0; i<8; i++) {
     float xp, yp;
     float x = cubef [ i * 3 + 0];
     float y = cubef [ i * 3 + 1];
@@ -305,8 +252,8 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
     Point* p = makePoint(x, y, z);
 
     //Rotate in all axis
-    *p = rotatePoint(*p, rot, 0);
-    *p = rotatePoint(*p, rot, 1);
+    *p = rotatePoint(*p, rot*1.5f, 0);
+    *p = rotatePoint(*p, rot*2.0f, 1);
     *p = rotatePoint(*p, rot, 2);
 
     //project Z axis on 2 dimensions
@@ -320,22 +267,40 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
 
     //Save point
     points[i] = makePoint(xp,yp,p->z);
-
-    /*if (( xp >= 0) && (xp < w) && (yp >= 0) && (yp < h)) {
-        int color = getColorByIndex(i);
-        setColorPixel(pixels, (int)xp, (int)yp, color);
-    }*/
   }
 
   //DRAW LINE PRIMITIVES
-  for (i=0; i<8; i+=2) {
+  for (i=0; i<24; i+=2) {
     Point* start = points[indices[i]];
     Point* end = points[indices[i+1]];
     drawLine(pixels, pitch, *start, *end, 0xffffff);
   }
 
+
+  
   //RASTERIZE POLYGONS
-  rasterize(pixels, points, pitch);
+//  for (i=0; i<2; i+=4) {
+    Point* sqp[4] = { points[0], points[1], points[2], points[3] };
+    rasterize(pixels, sqp, pitch, 0xFF0000);
+
+    Point* sqp_back[4] = { points[7], points[6], points[5], points[4] };
+    rasterize(pixels, sqp_back, pitch, 0x00FF00);
+
+    Point* sqp_bottom[4] = { points[0], points[4], points[5], points[1] };
+    rasterize(pixels, sqp_bottom, pitch, 0x0000FF);
+
+    Point* sqp_top[4] = { points[2], points[6], points[7], points[3] };
+    rasterize(pixels, sqp_top, pitch, 0x00FFFF);
+
+
+
+    Point* sqp_left[4] = { points[1], points[5], points[6], points[2] };
+    rasterize(pixels, sqp_left, pitch, 0xFF00FF);
+
+    Point* sqp_right[4] = { points[3], points[7], points[4], points[0] };
+    rasterize(pixels, sqp_right, pitch, 0xFFFF00);
+//  }
+
 }
 
 
@@ -375,7 +340,7 @@ int main ( int argc, char **argv) {
 
     
     if (g_keydown == 1)
-      ang += 0.01f;
+      ang += 0.05f;
 
     frame_SDL();
 

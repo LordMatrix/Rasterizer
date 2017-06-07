@@ -4,6 +4,8 @@ SDL_Event g_event;
 int g_end;
 unsigned int* g_screen_pixels;
 
+int g_keydown;
+
 
 /*******************************/
 /****** SDL FUNCTIONS  *********/
@@ -42,6 +44,12 @@ static void input_SDL() {
       {
         case SDL_QUIT:
           g_end = 1;
+          break;
+        case SDL_KEYDOWN:
+          g_keydown = 1;
+          break;
+        case SDL_KEYUP:
+          g_keydown = 0;
           break;
       }
     }
