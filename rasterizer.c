@@ -4,8 +4,21 @@
 #include <string.h>
 
 #include <SDL/SDL.h>
-
 #include "sdl_funcs.h"
+#include "chrono.h"
+
+
+int cpu_mhz = 2600;
+
+static void ChronoShow ( char* name, int computations)
+{
+  float ms = ChronoWatchReset();
+  float cycles = ms * (1000000.0f/1000.0f) * (float)cpu_mhz;
+  float cyc_per_comp = cycles / (float)computations;
+  fprintf ( stdout, "%s: %f ms, %d cycles, %f cycles/iteration\n", name, ms, (int)cycles, cyc_per_comp);
+}
+
+
 
 
 #define LCF (200.0f)    // En flotantes
@@ -56,85 +69,6 @@ void setColorPixel(unsigned int* pixels, int x, int y, int color) {
   int pitch = g_SDLSrf->pitch >> 2;
   pixels [ x + (y * pitch)] = color;
 }
-
-
-
-/// Retrieves the color of a pixel
-int getColorPixel(unsigned int* pixels, int x, int y) {
-  int pitch = g_SDLSrf->pitch >> 2;
-  return pixels[ x + (y * pitch)];
-}
-
-
-
-/// Somewhat randomizes the color returned
-int getColorByIndex(int i) {
-    int color;
-    switch (i) {
-        case 0:
-        case 4:
-            color = 0xff0000;
-            break;
-        case 1:
-        case 5:
-            color = 0x00ff00;
-            break;
-        case 2:
-        case 6:
-            color = 0x0000ff;
-            break;
-        case 3:
-        case 7:
-            color = 0xffffff;
-            break;
-        default:
-            color = 0xaaaaaa;
-            break;
-    }
-    return color;
-}
-
-
-
-/// Draws a straight line given a pair of points
-void drawLine(unsigned int* pixels, int pitch, Point start, Point end, int color) {
-    //Bresenham's algorithm
-    int dx = abs(end.x - start.x), sx = start.x < end.x ? 1 : -1;
-    int dy = abs(end.y - start.y), sy = start.y < end.y ? 1 : -1;
-    int err = (dx>dy ? dx : -dy)/2, e2;
-
-    for (;;) {
-      setColorPixel(pixels, start.x, start.y, color);
-
-      if (start.x==end.x && start.y==end.y)
-        break;
-
-      e2 = err;
-      if (e2 >-dx) { err -= dy; start.x += sx; }
-      if (e2 < dy) { err += dx; start.y += sy; }
-    }
-}
-
-
-/// Draws a straight line given a pair of points
-void drawLineF(unsigned int* pixels, int pitch, Pointf start, Pointf end, int color) {
-    //Bresenham's algorithm
-    int dx = abs(end.x - start.x), sx = start.x < end.x ? 1 : -1;
-    int dy = abs(end.y - start.y), sy = start.y < end.y ? 1 : -1;
-    int err = (dx>dy ? dx : -dy)/2, e2;
-
-    for (;;) {
-      setColorPixel(pixels, start.x, start.y, color);
-
-      if (start.x==end.x && start.y==end.y)
-        break;
-
-      e2 = err;
-      if (e2 >-dx) { err -= dy; start.x += sx; }
-      if (e2 < dy) { err += dx; start.y += sy; }
-    }
-}
-
 
 
 /// Shortcuts for the rotation matrix for a given axis. Axis => 0=x, 1=y, 2=z
@@ -219,7 +153,6 @@ static void rasterize(unsigned int* pixels, Point** p, int pitch, int color) {
   for (y=miny; y< maxy; y++) {
     for (x=minx; x< maxx; x++) {
       //When all half-space functions are positive, point is in quad
-
       if ((x1 - x2) * (y - y1) - (y1 - y2) * (x - x1) < 0 &&
           (x2 - x3) * (y - y2) - (y2 - y3) * (x - x2) < 0 &&
           (x3 - x4) * (y - y3) - (y3 - y4) * (x - x3) < 0 &&
@@ -233,20 +166,26 @@ static void rasterize(unsigned int* pixels, Point** p, int pitch, int color) {
 
 
 static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch, float trans_x, float trans_z, float proy, float rot) {
-  int i;
+  int i,j;
 
   Point* points[8];
-  //Indices for drawing lines to connect edges
-  int indices[24] = { 0,1, 1,2, 2,3, 3,0,
-                      4,5, 5,6, 6,7, 4,7,
-                      0,4, 1,5, 2,6, 3,7};
+  int base_index;
+
+  //Indices for drawing quads counter-clockwise
+  int indices[24] = { 0,1,2,3,
+                      7,6,5,4,
+                      0,4,5,1,
+                      2,6,7,3,
+                      1,5,6,2,
+                      3,7,4,0 };
 
   //Transform and paint all vertices in square
   for ( i=0; i<8; i++) {
     float xp, yp;
-    float x = cubef [ i * 3 + 0];
-    float y = cubef [ i * 3 + 1];
-    float z = cubef [ i * 3 + 2];
+    base_index = i * 3;
+    float x = cubef [ base_index + 0];
+    float y = cubef [ base_index + 1];
+    float z = cubef [ base_index + 2];
 
     //Construct point
     Point* p = makePoint(x, y, z);
@@ -258,8 +197,9 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
 
     //project Z axis on 2 dimensions
     p->z -= trans_z;
-    xp = (p->x * proy) / p->z;
-    yp = (p->y * proy) / p->z;
+    float inv_z = 1.0f / p->z;
+    xp = (p->x * proy) * inv_z;
+    yp = (p->y * proy) * inv_z;
 
     //translate points to the middle of the screen
     xp += w * 0.5f;
@@ -269,37 +209,13 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
     points[i] = makePoint(xp,yp,p->z);
   }
 
-  //DRAW LINE PRIMITIVES
-  for (i=0; i<24; i+=2) {
-    Point* start = points[indices[i]];
-    Point* end = points[indices[i+1]];
-    drawLine(pixels, pitch, *start, *end, 0xffffff);
-  }
-
-
+  int colors[6] = { 0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF };
   
   //RASTERIZE POLYGONS
-//  for (i=0; i<2; i+=4) {
-    Point* sqp[4] = { points[0], points[1], points[2], points[3] };
-    rasterize(pixels, sqp, pitch, 0xFF0000);
-
-    Point* sqp_back[4] = { points[7], points[6], points[5], points[4] };
-    rasterize(pixels, sqp_back, pitch, 0x00FF00);
-
-    Point* sqp_bottom[4] = { points[0], points[4], points[5], points[1] };
-    rasterize(pixels, sqp_bottom, pitch, 0x0000FF);
-
-    Point* sqp_top[4] = { points[2], points[6], points[7], points[3] };
-    rasterize(pixels, sqp_top, pitch, 0x00FFFF);
-
-
-
-    Point* sqp_left[4] = { points[1], points[5], points[6], points[2] };
-    rasterize(pixels, sqp_left, pitch, 0xFF00FF);
-
-    Point* sqp_right[4] = { points[3], points[7], points[4], points[0] };
-    rasterize(pixels, sqp_right, pitch, 0xFFFF00);
-//  }
+  for (i=0,j=0; i<24; i+=4,j++) {
+    Point* sqp[4] = { points[indices[i + 0]], points[indices[i + 1]], points[indices[i + 2]], points[indices[i + 3]] };
+    rasterize(pixels, sqp, pitch, colors[j]);
+  }
 
 }
 
@@ -333,20 +249,24 @@ int main ( int argc, char **argv) {
     float radius = 100.0f;
     x = 0.0f   + radius;
     z = offs_z + radius;
+
+
+    ChronoWatchReset();
+
     PaintCubeInFloat ( g_screen_pixels, (float)g_SDLSrf->w, (float)g_SDLSrf->h, pitch,
                        x, z,
                        projection, ang);
 
-
+    ChronoShow ( "Paint cube : ", g_SDLSrf->w * g_SDLSrf->h);
     
     if (g_keydown == 1)
-      ang += 0.05f;
+      ang += 0.0005f;
 
     frame_SDL();
 
     input_SDL();
 
-    SDL_Delay(40.0f);
+    //SDL_Delay(40.0f);
   }
 
   return 0;
