@@ -8,9 +8,9 @@
 #include "chrono.h"
 
 
-int cpu_mhz = 2600;
+int cpu_mhz = 3400;
 
-static void ChronoShow ( char* name, int computations)
+inline static void ChronoShow ( char* name, int computations)
 {
   float ms = ChronoWatchReset();
   float cycles = ms * (1000000.0f/1000.0f) * (float)cpu_mhz;
@@ -18,13 +18,9 @@ static void ChronoShow ( char* name, int computations)
   fprintf ( stdout, "%s: %f ms, %d cycles, %f cycles/iteration\n", name, ms, (int)cycles, cyc_per_comp);
 }
 
-
-
-
 #define LCF (200.0f)    // En flotantes
 #define PI 3.1416f
 #define DEBUG 0
-
 
 
 //Encapsulated point
@@ -33,14 +29,9 @@ typedef struct {
   int used;
 } Point;
 
-typedef struct {
-  float x,y,z;
-  int used;
-} Pointf;
-
 
 //Point "constructor"
-static Point* makePoint(int x, int y, int z) {
+inline static Point* makePoint(int x, int y, int z) {
   Point* p = malloc(sizeof(Point));
   p->x = x;
   p->y = y;
@@ -65,8 +56,7 @@ static float cubef [24] = {
 
 
 /// Sets the color of a pixel
-void setColorPixel(unsigned int* pixels, int x, int y, int color) {
-  int pitch = g_SDLSrf->pitch >> 2;
+inline void setColorPixel(unsigned int* pixels, int x, int y, int color, int pitch) {
   pixels [ x + (y * pitch)] = color;
 }
 
@@ -109,7 +99,7 @@ static Point rotatePoint(Point p, float rads, int axis) {
 
 
 
-int min(int n1, int n2, int n3, int n4) {
+inline int min(int n1, int n2, int n3, int n4) {
   float minn = n1;
 
   if (n2 < minn) minn = n2;
@@ -120,7 +110,7 @@ int min(int n1, int n2, int n3, int n4) {
 }
 
 
-int max(int n1, int n2, int n3, int n4) {
+inline int max(int n1, int n2, int n3, int n4) {
   float maxn = n1;
 
   if (n2 > maxn) maxn = n2;
@@ -150,15 +140,28 @@ static void rasterize(unsigned int* pixels, Point** p, int pitch, int color) {
   int miny = (int) min(y1,y2,y3,y4);
   int maxy = (int) max(y1,y2,y3,y4);
 
+  int x1x2 = x1-x2;
+  int x2x3 = x2-x3;
+  int x3x4 = x3-x4;
+  int x4x1 = x4-x1;
+
+  int y1y2 = y1-y2;
+  int y2y3 = y2-y3;
+  int y3y4 = y3-y4;
+  int y4y1 = y4-y1;
+
   for (y=miny; y< maxy; y++) {
+    int x1x2y = x1x2 * (y-y1);
+    int x2x3y = x2x3 * (y-y2);
+    int x3x4y = x3x4 * (y-y3);
+    int x4x1y = x4x1 * (y-y4);
+
     for (x=minx; x< maxx; x++) {
-      //When all half-space functions are positive, point is in quad
-      if ((x1 - x2) * (y - y1) - (y1 - y2) * (x - x1) < 0 &&
-          (x2 - x3) * (y - y2) - (y2 - y3) * (x - x2) < 0 &&
-          (x3 - x4) * (y - y3) - (y3 - y4) * (x - x3) < 0 &&
-          (x4 - x1) * (y - y4) - (y4 - y1) * (x - x4) < 0 
-          ) {
-        setColorPixel(pixels, x, y, color);
+      if (x1x2y - (y1y2 * (x - x1)) < 0 &&
+          x2x3y - (y2y3 * (x - x2)) < 0 &&
+          x3x4y - (y3y4 * (x - x3)) < 0 &&
+          x4x1y - (y4y1 * (x - x4)) < 0) {
+        setColorPixel(pixels, x, y, color, pitch);
       }
     }
   }
@@ -180,6 +183,11 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
                       3,7,4,0 };
 
   //Transform and paint all vertices in square
+
+  float rot_a = rot*1.5f;
+  float rot_b = rot*2.0f;
+  float rot_c = rot;
+
   for ( i=0; i<8; i++) {
     float xp, yp;
     base_index = i * 3;
@@ -191,9 +199,9 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
     Point* p = makePoint(x, y, z);
 
     //Rotate in all axis
-    *p = rotatePoint(*p, rot*1.5f, 0);
-    *p = rotatePoint(*p, rot*2.0f, 1);
-    *p = rotatePoint(*p, rot, 2);
+    *p = rotatePoint(*p, rot_a, 0);
+    *p = rotatePoint(*p, rot_b, 1);
+    *p = rotatePoint(*p, rot_c, 2);
 
     //project Z axis on 2 dimensions
     p->z -= trans_z;
