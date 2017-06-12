@@ -1,6 +1,6 @@
 
-gcc -c -g -Wall -O2 -o buildobjs/rasterizer.o rasterizer.c
-gcc -c -g -Wall -O2 -o buildobjs/chrono.o chrono.c
+gcc -c -g -Wall -O0 -o buildobjs/rasterizer.o rasterizer.c
+gcc -c -g -Wall -O0 -o buildobjs/chrono.o chrono.c
 
 
 cd buildobjs

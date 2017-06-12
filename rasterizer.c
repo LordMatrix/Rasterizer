@@ -7,7 +7,6 @@
 #include "sdl_funcs.h"
 #include "chrono.h"
 
-
 int cpu_mhz = 3400;
 
 inline static void ChronoShow ( char* name, int computations)
@@ -21,7 +20,7 @@ inline static void ChronoShow ( char* name, int computations)
 #define LCF (200.0f)    // En flotantes
 #define PI 3.1416f
 #define DEBUG 0
-
+#define ASSEMBLY 0
 
 //Encapsulated point
 typedef struct {
@@ -97,8 +96,10 @@ static Point rotatePoint(Point p, float rads, int axis) {
   return trans;
 }
 
-
-
+#if ASSEMBLY
+extern int min(int n1, int n2, int n3, int n4);
+extern int max(int n1, int n2, int n3, int n4);
+#else
 inline int min(int n1, int n2, int n3, int n4) {
   float minn = n1;
 
@@ -119,6 +120,7 @@ inline int max(int n1, int n2, int n3, int n4) {
 
   return maxn;
 }
+#endif
 
 
 static void rasterize(unsigned int* pixels, Point** p, int pitch, int color) {
