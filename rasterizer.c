@@ -56,8 +56,8 @@ static float cubef [24] = {
 
 
 /// Sets the color of a pixel
-inline void setColorPixel(unsigned int* pixels, int x, int y, int color, int pitch) {
-  pixels [ x + (y * pitch)] = color;
+inline void setColorPixel(unsigned int* pixels, int x, int y, int color) {
+  pixels [ x + y] = color;
 }
 
 
@@ -150,18 +150,23 @@ static void rasterize(unsigned int* pixels, Point** p, int pitch, int color) {
   int y3y4 = y3-y4;
   int y4y1 = y4-y1;
 
+  int x1x2y, x2x3y, x3x4y, x4x1y;
+  int pitched_y;
+  
   for (y=miny; y< maxy; y++) {
-    int x1x2y = x1x2 * (y-y1);
-    int x2x3y = x2x3 * (y-y2);
-    int x3x4y = x3x4 * (y-y3);
-    int x4x1y = x4x1 * (y-y4);
+    x1x2y = x1x2 * (y-y1);
+    x2x3y = x2x3 * (y-y2);
+    x3x4y = x3x4 * (y-y3);
+    x4x1y = x4x1 * (y-y4);
 
+	  pitched_y = y * pitch;
+	
     for (x=minx; x< maxx; x++) {
       if (x1x2y - (y1y2 * (x - x1)) < 0 &&
           x2x3y - (y2y3 * (x - x2)) < 0 &&
           x3x4y - (y3y4 * (x - x3)) < 0 &&
           x4x1y - (y4y1 * (x - x4)) < 0) {
-        setColorPixel(pixels, x, y, color, pitch);
+        setColorPixel(pixels, x, pitched_y, color);
       }
     }
   }
@@ -215,6 +220,7 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
 
     //Save point
     points[i] = makePoint(xp,yp,p->z);
+    free(p);
   }
 
   int colors[6] = { 0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF };
@@ -223,6 +229,10 @@ static void PaintCubeInFloat ( unsigned int* pixels, float w, float h, int pitch
   for (i=0,j=0; i<24; i+=4,j++) {
     Point* sqp[4] = { points[indices[i + 0]], points[indices[i + 1]], points[indices[i + 2]], points[indices[i + 3]] };
     rasterize(pixels, sqp, pitch, colors[j]);
+  }
+
+  for ( i=0; i<8; i++) {
+    free (points[i]);
   }
 
 }
